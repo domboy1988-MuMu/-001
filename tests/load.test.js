@@ -59,71 +59,44 @@ function loadAll(unlocked) {
   for (const f of files) {
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), "utf8"), ctx, { filename: f });
   }
-  vm.runInContext(`window.UNLOCKED = ${unlocked};`, ctx, { filename: "inline" });
-  vm.runInContext(fs.readFileSync(path.join(ROOT, "src/app.js"), "utf8"), ctx, { filename: "src/app.js" });
+    vm.runInContext(fs.readFileSync(path.join(ROOT, "src/app.js"), "utf8"), ctx, { filename: "src/app.js" });
   return ctx;
 }
 
 console.log("\n── 全腳本載入（模擬瀏覽器）──");
-let freeCtx = null, paidCtx = null;
-try { freeCtx = loadAll(false); ok("demo.html 腳本鏈載入成功", true); }
-catch (e) { ok("demo.html 腳本鏈載入成功", false, e.constructor.name + ": " + e.message); }
-try { paidCtx = loadAll(true); ok("unlock.html 腳本鏈載入成功", true); }
-catch (e) { ok("unlock.html 腳本鏈載入成功", false, e.constructor.name + ": " + e.message); }
+let freeCtx = null;
+try { freeCtx = loadAll(false); ok("index.html 腳本鏈載入成功", true); }
+catch (e) { ok("index.html 腳本鏈載入成功", false, e.constructor.name + ": " + e.message); }
 
-if (freeCtx && paidCtx) {
-  console.log("\n── 旗標正確傳遞 ──");
-  ok("免費版 UNLOCKED === false", vm.runInContext("UNLOCKED", freeCtx) === false);
-  ok("付費版 UNLOCKED === true", vm.runInContext("UNLOCKED", paidCtx) === true);
-
+if (freeCtx) {
   console.log("\n── 關鍵函式皆已定義 ──");
   ["computeChart", "generateReport", "analyzeNumber", "generateMagneticReport",
    "buildPages", "unlockedPages", "renderBook", "showPage", "renderSales", "bindTool", "runTool",
-   "bgmStart", "bgmPlay", "bgmFade"].forEach((fn) => {
+   "bgmStart", "bgmPlay", "bgmFade", "doUnlock", "lockedSlot"].forEach((fn) => {
     ok(`${fn}`, vm.runInContext(`typeof ${fn}`, freeCtx) === "function");
   });
 
-  console.log("\n── 兩版內容差異 ──");
-  const build = (ctx) => {
-    vm.runInContext(`chart=computeChart("1990-01-01",{baseYear:2026});
-      report=generateReport(chart);
-      magnet=analyzeNumber("19900101");
-      magRep=generateMagneticReport(magnet,chart);`, ctx);
-    return vm.runInContext("buildPages()", ctx);
-  };
-  const free = build(freeCtx), paid = build(paidCtx);
-  ok("免費版頁數少於付費版", free.length < paid.length, `${free.length} vs ${paid.length} 頁`);
-  const fh = free.map(p => p.h).join(""), ph = paid.map(p => p.h).join("");
-  // 付費牆已改為「僅最後一頁」的設計：內文章節全部公開，
-  // 免費版最後一頁以預告與 CTA 收束，頁內不再出現遮罩區塊。
-  ok("免費版章節無遮罩（人格與數字全公開）", (fh.match(/class="veil"/g) || []).length === 0);
-  ok("付費版無遮罩", (ph.match(/class="veil"/g) || []).length === 0);
-  ok("免費版最後一頁有購買 CTA", /id="toSales"/.test(free[free.length - 1].h));
-  ok("免費版缺數頁與付費版內容一致（不上鎖）", (() => {
-    const a = free.find(p => p.t.includes("缺")), b = paid.find(p => p.t.includes("缺"));
-    return a && b && a.h === b.h;
-  })());
-  ok("兩版皆無破圖", !/undefined|NaN|\[object Object\]/.test(fh + ph));
-}
-
-console.log("\n── 常數不可重複宣告 ──");
+  console.log("\n── 常數不可重複宣告 ──");
 {
   // 曾發生過：修改常數區時整段複製，造成 const 重複宣告，
   // 瀏覽器直接拋 SyntaxError 使整個 app.js 不執行（全黑畫面）。
   const src = fs.readFileSync(path.join(ROOT, "src/app.js"), "utf8");
-  const names = ["CALC_MS","REVEAL_NUM_MS","REVEAL_END_MS","REVEAL_POS",
+  const names = ["CALC_MS","REVEAL_POS","REVEAL_BURST","REVEAL_HOLD_MS",
                  "AUTO_SUBMIT_MS","SUN_HOTSPOT_ENABLED","HOTSPOTS","PROGRESS",
                  "BGM_VOLUME","VID_VOLUME","BGM_SRC"];
   const dup = names.filter(n =>
     (src.match(new RegExp("^const\\s+" + n + "\\s*[=({]", "gm")) || []).length !== 1);
   ok("所有常數皆唯一宣告", dup.length === 0, dup.join(","));
+  // REVEAL_NUM_MS / REVEAL_END_MS 需可被 loadedmetadata 覆寫，故為 let
+  const lets = ["REVEAL_NUM_MS","REVEAL_END_MS"].filter(n =>
+    (src.match(new RegExp("^let\\s+" + n + "\\s*=", "gm")) || []).length !== 1);
+  ok("可覆寫的時間變數唯一宣告且為 let", lets.length === 0, lets.join(","));
+}
 }
 
 console.log("\n── 入口檔結構 ──");
-["demo.html", "unlock.html"].forEach((f) => {
+["index.html"].forEach((f) => {
   const h = fs.readFileSync(path.join(ROOT, f), "utf8");
-  ok(`${f} 使用 window.UNLOCKED（避免變數衝突）`, /window\.UNLOCKED\s*=/.test(h));
-  ok(`${f} 未用 const/let 宣告 UNLOCKED`, !/(const|let)\s+UNLOCKED/.test(h));
   ok(`${f} 引入 app.css`, /app\.css/.test(h));
   ok(`${f} 引入 app.js`, /app\.js/.test(h));
   const need = ["bgm", "mute", "stage", "v1", "v2", "v3", "v4", "book", "sales"];

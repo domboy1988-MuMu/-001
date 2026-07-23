@@ -38,7 +38,6 @@ ctx.addEventListener=()=>{};ctx.window=ctx;ctx.location={protocol:"http:"};
 vm.createContext(ctx);
 ["src/engine.js","src/content.js","src/magnetic.js","src/magnetic-content.js"].forEach(f=>
   vm.runInContext(fs.readFileSync(f,"utf8"),ctx,{filename:f}));
-vm.runInContext("window.UNLOCKED=false;",ctx);
 vm.runInContext(fs.readFileSync("src/app.js","utf8"),ctx,{filename:"app.js"});
 
 let pass=0,fail=0;

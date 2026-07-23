@@ -24,7 +24,6 @@ ctx.document={getElementById:mk,querySelectorAll:()=>[],querySelector:()=>mk("q"
 ctx.addEventListener=()=>{};ctx.window=ctx;ctx.location={protocol:"http:"};
 vm.createContext(ctx);
 ["src/engine.js","src/content.js","src/magnetic.js","src/magnetic-content.js"].forEach(f=>vm.runInContext(fs.readFileSync(f,"utf8"),ctx));
-vm.runInContext("window.UNLOCKED=false;",ctx);
 vm.runInContext(fs.readFileSync("src/app.js","utf8"),ctx);
 
 function type(v){ store["bd"].value=v; store["bd"]._fire("input",{target:store["bd"]}); }

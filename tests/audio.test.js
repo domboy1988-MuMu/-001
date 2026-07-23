@@ -58,7 +58,6 @@ function boot() {
   vm.createContext(ctx);
   ["src/engine.js", "src/content.js", "src/magnetic.js", "src/magnetic-content.js"]
     .forEach((f) => vm.runInContext(fs.readFileSync(path.join(ROOT, f), "utf8"), ctx, { filename: f }));
-  vm.runInContext("window.UNLOCKED=false;", ctx);
   vm.runInContext(fs.readFileSync(path.join(ROOT, "src/app.js"), "utf8"), ctx, { filename: "src/app.js" });
   return { ctx, store };
 }

@@ -1,10 +1,59 @@
 
-/* 解鎖狀態由入口檔（demo.html / unlock.html）設定於 window.UNLOCKED。
-   ⚠️ 這裡刻意讀取 window 屬性而非宣告同名變數——
-      若入口檔用 const 宣告、本檔再用 var 宣告，會觸發
-      「Identifier has already been declared」而使整個檔案停止執行（全白/黑屏）。
-   未設定時預設為未解鎖，避免免費版意外洩漏付費內容。 */
-const UNLOCKED = (typeof window !== "undefined" && window.UNLOCKED === true);
+/* ══════════════════════════════════════════════════════════
+   解鎖狀態
+   免費與付費不再是兩個檔案，而是同一份程式的兩種執行狀態。
+   使用者按下解鎖後，unlocked 由 false 轉為 true，
+   報告會就地重建並從第一頁重新展開，各章節先前隱藏的段落隨之顯現。
+
+   ⚠️ DEV_UNLOCK_OPEN 為開發／自審模式：
+      設為 true 時，按下解鎖會照常顯示付費提示，
+      但確認後直接解鎖，方便反覆檢視付費版內容。
+      正式上線前必須改為 false，並接上平台的內購驗證。
+   ══════════════════════════════════════════════════════════ */
+let unlocked = false;
+const DEV_UNLOCK_OPEN = true;
+
+/**
+ * 章節內的隱藏段落。
+ * 未解鎖時顯示標題與一句勾引文字，解鎖後顯示真正的內容。
+ * 解鎖後首次呈現會帶上 fresh 標記，用於高亮動畫。
+ */
+function lockedSlot(title, tease, content){
+  if(unlocked){
+    return `<div class="slot open${justUnlocked ? " fresh" : ""}">
+      <div class="slot-h"><span class="slot-k">已解鎖</span>${title}</div>
+      ${content}
+    </div>`;
+  }
+  return `<div class="slot lock">
+    <div class="slot-h"><span class="slot-k lockk">未解鎖</span>${title}</div>
+    <p class="slot-t">${tease}</p>
+    <div class="slot-blur">
+      <span></span><span></span><span></span>
+    </div>
+  </div>`;
+}
+
+/* 缺數章節的隱藏段落。抽成函式是因為該章有「有缺數／無缺數」兩個分支，
+   直接寫在三元運算式裡容易破壞結構（曾因此造成語法錯誤）。 */
+function missGapSlot(r){
+  return lockedSlot(
+    "缺這個數字，會在哪裡跌倒",
+    "知道缺什麼只是第一步。真正該問的是：這個缺口會在人生的哪個階段、以什麼形式出現？多數人都是踩過同一個坑好幾次，才發現原來早就寫在命盤裡。",
+    `<p>缺數的影響不會平均分布在一生中，而是集中在特定的大運階段爆發。
+       你未來的大運裡，有幾步會特別放大這個缺口——</p>
+     ${r.dayun.steps.filter(x=>!x.past).slice(0,3).map(x=>
+       `<p class="tip"><b>${x.from}–${x.to} 歲</b>${x.name}：${x.watch}</p>`).join("")}
+     <p class="dim">完整的 ${r.dayun.steps.length} 步大運與各階段提醒，在「大運．一生的階段」那一章。</p>`
+  );
+}
+
+/* 解鎖後的高亮。
+   ⚠️ 不用計時器控制——使用者翻閱速度差異很大，
+      固定秒數要嘛太短（還沒翻到就熄了）、要嘛太長（一直閃）。
+      改以「翻頁次數」為準：解鎖後翻過整本一輪就自然收起。 */
+let justUnlocked = false;
+let unlockedTurns = 0;
 
 /* ══════════════════════════════════════════════════════════
    音訊
@@ -160,22 +209,42 @@ const SUN_HOTSPOT_ENABLED = false;
 
 const CALC_MS = 9000;          // 計算動畫長度（v2 全長 10 秒，播 9 秒不會循環到接縫）
 
-/* 揭曉時間點：依 v3-reveal.mp4 的實際節奏設定。
+/* 揭曉時間點。
 
-   影片已剪為 2.2 秒（取原始 10 秒檔的第 3.5～5.7 秒），
-   爆光峰值落在第 1.5 秒，首尾各 0.35 秒淡入淡出。
+   數字必須騎著爆光那一刻出現，太早會在水晶球尚未發光時就跳出來。
+   但爆光的秒數取決於 v3 的剪法，換一支影片就得跟著改——
+   因此改為依影片實際長度自動選定，換檔案不必動程式。
 
-   ⚠️ 為何是「剪掉前段」而非「剪掉最後三秒」：
-      原本 5.2 秒版本的爆光在第 3 秒，若直接砍掉最後三秒
-      只剩 2.2 秒，爆光與數字都會被剪掉，揭曉就沒有了。
-      因此改為保留爆光、剪去前段的緩慢鋪陳，
-      長度同樣是 2.2 秒，但高潮完整保留。
+   assets/video/ 內備有三種長度，改名為 v3-reveal.mp4 即可切換：
+     v3-reveal-original.mp4  10.0 秒（原始完整版，爆光 5.0 秒）
+     v3-reveal-5s.mp4         5.2 秒（剪去前段鋪陳，爆光 3.0 秒）
+     v3-reveal-2s.mp4         2.2 秒（只保留爆光前後，節奏最快）
 
-   ⚠️ 轉場由影片的 ended 事件觸發，計時器僅作保險。
-      若用固定秒數，影片一旦更換或載入延遲就會出現
-      「v3 還在播就切走」或「v3 播完卡住」的斷層。 */
-const REVEAL_NUM_MS = 1350;    // 數字浮現（比峰值早 0.15 秒，讓光包住數字）
-const REVEAL_END_MS = 2300;    // 保險用；正常情況由 v3 的 ended 事件先觸發
+   若換上其他影片，在下表補一列即可；
+   找不到對應長度時，會以「片長的 50%」估算爆光位置。 */
+const REVEAL_BURST = [
+  { dur: 10.0, num: 4850 },
+  { dur:  5.2, num: 2850 },
+  { dur:  2.2, num: 1350 },
+];
+let REVEAL_NUM_MS = 4850;      // 由 v3 的 loadedmetadata 事件覆寫
+let REVEAL_END_MS = 10500;     // 保險用；正常情況由下列兩個條件先觸發
+
+/* 數字浮現後停留多久才切到結果頁。
+   v3 後段是爆光之後的餘韻，不需要播完——
+   數字看清楚了就讓 v4 接手，動畫節奏與操作感才一致。
+   影片較短時 ended 事件會更早觸發，兩者取先到者。 */
+const REVEAL_HOLD_MS = 1800;
+
+document.getElementById("v3").addEventListener("loadedmetadata", ()=>{
+  const d = document.getElementById("v3").duration;
+  if(!d || !isFinite(d)) return;
+  // 取最接近的已知長度；差距超過 0.4 秒視為未知影片，改用比例估算
+  const hit = REVEAL_BURST.reduce((a,b)=>
+    Math.abs(b.dur-d) < Math.abs(a.dur-d) ? b : a);
+  REVEAL_NUM_MS = Math.abs(hit.dur-d) <= 0.4 ? hit.num : Math.round(d*1000*0.5);
+  REVEAL_END_MS = Math.round(d*1000) + 500;
+});
 
 const PROGRESS = ["正在讀取你的出生密碼","正在比對五行與靈數的共鳴","正在推算流年軌跡","就快好了，請稍等"];
 
@@ -455,8 +524,11 @@ function runReveal(){
     n.classList.add("on");
   }, REVEAL_NUM_MS);
   // 影片自然播完即轉場，確保 v3 與 v4 無縫銜接
+  // 數字停留足夠時間後即切換，不等 v3 播完；
+  // 若影片較短先播完，ended 事件會提前觸發，兩者取先到者。
   clearTimeout(revealTimer);
-  revealTimer = setTimeout(()=>{ if(stage==="reveal") go("result"); }, REVEAL_END_MS);
+  const cut = Math.min(REVEAL_NUM_MS + REVEAL_HOLD_MS, REVEAL_END_MS);
+  revealTimer = setTimeout(()=>{ if(stage==="reveal") go("result"); }, cut);
 }
 
 /* ── 五行雷達圖（SVG，數據驅動）── */
@@ -641,22 +713,40 @@ function unlockedPages(r, c, mg){
         : `你的本命凶星都已化解，後天數字只要維持不扣分即可。`}</p>
     </div>
 
-    <p class="q">填入你正在使用的號碼</p>
-    <p class="dim">只填想檢查的即可，不需要全部填寫。</p>
+    <p class="q">可以填什麼</p>
+    <p>任何你日常在使用的號碼都可以：<b>手機號碼、身分證字號、銀行帳號、
+       車牌、住址門牌、信用卡末四碼、門鎖密碼、常戴飾品上的編號</b>——
+       只要是會反覆出現在你生活中的數字，都帶著它自己的磁場。</p>
+    <p class="dim">英文字母會自動略過，只取其中的數字。
+       例如身分證 <b>M121864569</b>，系統會取 <b>121864569</b> 來拆解。</p>
+
+    <p class="q">系統會算出什麼</p>
+    <div class="tguide">
+      <div class="tg"><span>1</span><p>把每組號碼拆成相鄰兩位數，對照出各自帶了哪些磁場</p></div>
+      <div class="tg"><span>2</span><p>比對這些磁場與你本命的關係——是補足、是重疊，還是相沖</p></div>
+      <div class="tg"><span>3</span><p>統計所有號碼合起來，你補到了什麼、還缺什麼</p></div>
+      <div class="tg"><span>4</span><p>若某組號碼反而帶進凶星，會直接指出並建議更換</p></div>
+    </div>
+
+    <p class="q">填入你的號碼</p>
+    <p class="dim">左邊自己命名，右邊填數字。不需要全部填滿，
+       填幾項就算幾項。</p>
     <div class="tform">
-      ${TOOL_ITEMS.map(it=>`
-        <div class="trow">
-          <label for="t_${it.id}">
-            <b>${it.label}</b>
-            <i>${it.hint}</i>
-          </label>
-          <input id="t_${it.id}" class="tnum" inputmode="numeric" placeholder="數字">
-        </div>`).join("")}
-      <div id="toolCustom"></div>
-      <button class="taddbtn" id="toolAdd">＋ 自訂項目（最多 3 項）</button>
+      <div id="toolRows">
+        ${Array.from({length: TOOL_ROWS_INIT}, (_,i)=>toolRowHTML(i)).join("")}
+      </div>
+      <button class="taddbtn" id="toolAdd">＋ 新增一列（最多 ${TOOL_ROWS_MAX} 列）</button>
     </div>
 
     <button class="cta" id="toolRun">開 始 測 算</button>
+
+    <div class="tsafe">
+      <div class="tsafe-i">＊</div>
+      <p><b>僅供測算</b><br>
+      本程式不會留下任何記錄，你輸入的數字只在這個頁面上運算，
+      關閉或重新整理後即消失，不會上傳、不會儲存，
+      因此沒有個資外洩的問題。請安心填寫。</p>
+    </div>
 
     <div id="toolOut"></div>`},
 
@@ -802,7 +892,17 @@ function buildPages(){
     <p class="q">${gd.destiny.label}</p>
     <p>${gd.destiny.text}</p>
     <p class="dim">婚姻線與命運線非九宮格連線，
-       前者由態度數 ${c.numbers.attitude} 與感情線推導，後者即主命數 ${c.numbers.life}。</p>`},
+       前者由態度數 ${c.numbers.attitude} 與感情線推導，後者即主命數 ${c.numbers.life}。</p>
+    ${lockedSlot(
+      "你現在走到人生的哪一步",
+      `命盤有主軸，人生有階段。你今年 ${r.dayun.currentAge} 歲，正走在一段有明確主題的九年裡——這一步該衝、該守，還是該等，方向完全不同。`,
+      r.dayun.current ? `<p>你正走在第 ${r.dayun.current.index+1} 步大運
+        <b>「${r.dayun.current.name}」</b>（${r.dayun.current.from}–${r.dayun.current.to} 歲）。</p>
+        <p>${r.dayun.current.desc}</p>
+        <p class="tip"><b>要注意</b>${r.dayun.current.watch}</p>
+        <p class="dim">完整的 ${r.dayun.steps.length} 步大運，在「大運．一生的階段」那一章。</p>`
+        : `<p>你的年齡尚未進入大運推算範圍。</p>`
+    )}`},
 
   // ═══ 2／8 特質 ═══ 優缺點 · 五行雷達 · 內外組合
   {t:"你 是 什 麼 樣 的 人", h:`
@@ -824,7 +924,15 @@ function buildPages(){
     <p>${io.verdict}</p>
     ${io.misread?`<p class="dim">${io.misread}</p>`:""}
     <p class="dim">在職場上，外在數 ${io.outer} 決定同事對你的第一印象，
-       內在數 ${io.inner} 才是你實際的決策方式——這正是你最容易被放錯位置的原因。</p>`},
+       內在數 ${io.inner} 才是你實際的決策方式——這正是你最容易被放錯位置的原因。</p>
+    ${lockedSlot(
+      "同樣這個性格，在感情裡是什麼樣子",
+      "職場上的你和關係裡的你，往往不是同一個人。內外落差越大，親密關係中的誤會就越深——對方以為的你，和真正的你，差在哪裡？",
+      `<p>你的桃花元素是<b>${r.peachBlossom.name}</b>，桃花指數 ${r.peachBlossom.score}。</p>
+       <p>${r.peachBlossom.desc}</p>
+       <p class="tip"><b>你會遇到</b>${r.peachBlossom.meetType}</p>
+       <p class="dim">完整的桃花分析與爛桃花警訊，在「桃花與正緣」那一章。</p>`
+    )}`},
 
   // ═══ 3／8 先天數 ＋ 八星磁場（同一組數字的兩種讀法，合併閱讀更連貫）═══
   {t:"先 天 數 字 與 磁 場", h:`
@@ -860,7 +968,16 @@ function buildPages(){
       <p class="q">你的命盤屬於「空盤」</p>
       <p>你的出生年月日中 0 與 5 的比例偏高，未形成明顯的主導磁場。
          這代表你的能量方向由後天數字決定的成分更大——手機號碼、車牌
-         這類天天使用的數字，對你的影響會比一般人更明顯。</p>`}`},
+         這類天天使用的數字，對你的影響會比一般人更明顯。</p>`}
+    ${lockedSlot(
+      "這些磁場，正在怎麼影響你的錢",
+      "八星裡有一顆專管財富的星。它在不在你的命盤裡，決定了你賺錢是順水推舟還是逆流而上。",
+      `<p>${mg.counts && mg.counts["天醫"]
+        ? `你有 <b>${mg.counts["天醫"]} 組天醫</b>——八星裡最直接與財富相關的磁場，讓你「靠專業累積財富」的路徑比一般人順暢。`
+        : `你的命盤中<b>沒有天醫</b>。這不代表賺不到錢，而是財富需要透過後天數字補強，否則容易出現「能力配得上更好的收入，但就是卡著」的狀況。`}</p>
+       <p>${r.money.talent}</p>
+       <p class="tip"><b>創業適性</b>${"★".repeat(r.money.biz.star)}${"☆".repeat(5-r.money.biz.star)}　${r.money.biz.verdict}</p>`
+    )}`},
 
   // ═══ 4／8 交會 ═══ 兩套系統的交叉解讀 · 化解與補強
   {t:"兩 套 命 盤 的 交 會", h:`
@@ -883,7 +1000,16 @@ function buildPages(){
       ${mg.recommend.map(x=>`
         <p class="dim" style="margin-bottom:6px">補「${x.field}」（${x.reason}）：${x.info.short}</p>
         <div class="pairs">${x.sample.map(pp=>`<div class="pr good"><b>${pp}</b></div>`).join("")}</div>`).join("")}
-`:""}`},
+`:""}
+    ${lockedSlot(
+      "知道要補，那該補在哪裡",
+      "上面列出了該補的組合，但放進哪一組號碼才有效？手機、帳號、車牌各有不同的引動強度——放錯地方，補了也是白補。",
+      `<p>後天數字的引動強度取決於你使用它的頻率。手機號碼是你每天被呼叫的入口，
+         強度最高；車牌牽動移動時的能量；住址影響休息與家運。</p>
+       <p class="tip"><b>優先順序</b>先從最容易更換的號碼下手（多半是手機或銀行帳號），
+         效果最直接、成本也最低。</p>
+       <p class="dim">報告最後附有數字檢測工具，可直接輸入你正在使用的號碼逐一檢查。</p>`
+    )}`},
 
   // ═══ 5／8 缺數 ═══
   {t:"天 生 缺 乏 什 麼", h: nm.primary ? `
@@ -898,12 +1024,13 @@ function buildPages(){
     ${nm.missingDetail.filter(m=>m.num!==nm.primary.num).map(m=>`
       <p class="q">缺 ${m.num}：${m.lack}</p>
       <p>${m.desc}</p>
-      <p class="tip"><b>建議</b>${m.fill}</p>`).join("")}`
+      <p class="tip"><b>建議</b>${m.fill}</p>`).join("")}
+    ${missGapSlot(r)}`
   : `
     <p>${nm.missingNote}</p>
     <p class="dim">這樣的命盤並不常見。你的基礎相當完整，
-       但也因為沒有明顯的缺口，較難自然形成極端的專長——
-       完整報告中會說明，這樣的人該把力氣放在哪裡。</p>`},
+       但也因為沒有明顯的缺口，較難自然形成極端的專長。</p>
+    ${missGapSlot(r)}`},
 
   // ═══ 6／8 人際與事業 ═══ 契合的人 · 事業財運
   {t:"人 際 與 事 業", h:`
@@ -926,7 +1053,17 @@ function buildPages(){
       : `要留意：你的磁場中沒有「天醫」這顆主財星，財富需要靠後天數字補強。`}</p>
     <p class="q">適不適合當老闆</p>
     <div class="stars">${"★".repeat(r.money.biz.star)}${"☆".repeat(5-r.money.biz.star)}</div>
-    <p>${r.money.biz.verdict}——${r.money.biz.why}</p>`},
+    <p>${r.money.biz.verdict}——${r.money.biz.why}</p>
+    ${lockedSlot(
+      "什麼時候會遇到那個人",
+      "上面說了你適合什麼樣的人。但更多人想知道的是——什麼時候？命盤中確實有幾個階段，是感情特別容易定下來的時機。",
+      `<p>依大運推算，你的感情關鍵期落在這幾段——</p>
+       ${(()=>{const m=r.dayun.steps.filter(x=>x.events.some(e=>e.kind==="感情"));
+         return m.length ? m.map(x=>
+           `<p class="tip"><b>${x.from}–${x.to} 歲</b>${x.events.find(e=>e.kind==="感情").text}</p>`).join("")
+         : `<p class="dim">你的大運中沒有特別突出的感情關鍵期，代表感情走勢平穩，不易大起大落。</p>`;})()}
+       <p class="dim">另有理想型、爛桃花警訊與正緣場域的完整分析，在「桃花與正緣」那一章。</p>`
+    )}`},
 
   // ═══ 7／8 流年與開運 ═══
   {t:`${c.baseYear} 流 年 與 開 運`, h:`
@@ -946,10 +1083,20 @@ function buildPages(){
     <p class="dim">有利方位：${r.colors.dir}　·　開運物：${r.colors.items.join("、")}<br>
        ${r.lucky.weakSupport}</p>
     <p class="q">日常提醒</p>
-    <p>${r.lucky.action}</p>`},
+    <p>${r.lucky.action}</p>
+    ${lockedSlot(
+      "未來五年，哪一年會翻身",
+      "今年只是九年裡的一格。真正決定你這幾年過得順不順的，是接下來哪一年能量最強、哪一年該按兵不動——這是規劃的依據，不是安慰。",
+      `<p>你未來五年的流年走勢——</p>
+       ${r.yearFortune.timeline.map(t=>
+         `<p class="tip"><b>${t.year}</b>流年 ${t.number}「${t.name}」　指數 ${t.score}　·　${t.theme}</p>`).join("")}
+       <p>能量最強的是 <b>${[...r.yearFortune.timeline].sort((a,b)=>b.score-a.score)[0].year} 年</b>，
+          最需保守的是 <b>${[...r.yearFortune.timeline].sort((a,b)=>a.score-b.score)[0].year} 年</b>。</p>
+       <p class="dim">逐年詳解與逢凶化吉的方向，在「未來五年流年」那一章。</p>`
+    )}`},
 
   // ═══ 8／8 收尾：未解鎖為預告頁；已解鎖的收尾與工具已移入 unlockedPages
-  ...(UNLOCKED ? unlockedPages(r,c,mg) : [{t:"你 只 看 到 了 一 半", h:`
+  ...(unlocked ? unlockedPages(r,c,mg) : [{t:"你 只 看 到 了 一 半", h:`
     <p>剛才這 ${countFreePages()} 頁，已經把你的<b>人格與數字</b>說完了。</p>
     <p>但關於<b>感情、未來，以及你身邊那些數字</b>的部分，
        還沒有揭曉。</p>
@@ -1008,42 +1155,62 @@ function renderBook(keepPage=false){
 
 /* ══════════════════════════════════════════════════════════
    數字檢測工具
-   排序依「可更換難度」由難到易再到難：
-     身分證字號（終身不變，作為基準）
-     電話、銀行帳號（最容易更換，優先建議調整）
-     車牌、住址（可換但成本高）
-   另可自訂最多 3 項（例如手鍊、門號副卡、保險箱密碼）。
+   全部欄位皆為自由填寫：左欄自行輸入名稱、右欄輸入數字。
+   預設給 5 列，不足時可自行新增至上限。
+   ⚠️ 不預設項目名稱，是因為每個人手上的數字組合差異很大
+      （有人有三支門號、有人有多個帳戶），固定選項反而綁手綁腳。
    ══════════════════════════════════════════════════════════ */
-const TOOL_ITEMS = [
-  { id:"id",    label:"身分證字號", hint:"終身不變，作為你的後天基準", fixed:true },
-  { id:"phone", label:"電話號碼",   hint:"最容易更換，建議優先調整" },
-  { id:"bank",  label:"銀行帳號",   hint:"可申請新帳戶，更換成本低" },
-  { id:"plate", label:"車牌號碼",   hint:"可申請換牌，成本中等" },
-  { id:"addr",  label:"住址門牌",   hint:"不易更動，了解即可" },
-];
-const TOOL_CUSTOM_MAX = 3;
+const TOOL_ROWS_INIT = 5;    // 初始空白列數
+const TOOL_ROWS_MAX  = 10;   // 上限，避免一次算太多導致頁面過長
+
+/** 產生一列輸入欄（name 與 number） */
+function toolRowHTML(i){
+  return `<div class="trow" data-i="${i}">
+      <input class="tname" placeholder="項目名稱（例：手機、手鍊）" maxlength="12">
+      <input class="tnum" inputmode="numeric" placeholder="數字">
+      <button class="tdel" title="刪除這一列">×</button>
+    </div>`;
+}
 
 /* 綁定檢測頁的互動。頁面為動態產生，每次顯示都要重新綁定。 */
 function bindTool(){
   const runBtn = document.getElementById("toolRun");
   if(!runBtn) return;                 // 免費版沒有這一頁
-
-  // 新增自訂欄位
+  const box = document.getElementById("toolRows");
   const addBtn = document.getElementById("toolAdd");
+
+  const refresh = ()=>{
+    const n = box.querySelectorAll(".trow").length;
+    if(addBtn) addBtn.style.display = n >= TOOL_ROWS_MAX ? "none" : "block";
+    // 至少保留一列，避免全部刪光後無從輸入
+    box.querySelectorAll(".tdel").forEach(b=>{
+      b.style.visibility = n <= 1 ? "hidden" : "visible";
+    });
+  };
+
+  const bindRow = (row)=>{
+    const del = row.querySelector(".tdel");
+    if(del) del.onclick = ()=>{
+      if(box.querySelectorAll(".trow").length <= 1) return;
+      row.remove(); refresh();
+    };
+  };
+
+  box.querySelectorAll(".trow").forEach(bindRow);
+  refresh();
+
   if(addBtn){
     addBtn.onclick = ()=>{
-      const box = document.getElementById("toolCustom");
       const n = box.querySelectorAll(".trow").length;
-      if(n >= TOOL_CUSTOM_MAX) return;
-      const i = n;
-      const div = document.createElement("div");
-      div.className = "trow custom";
-      div.innerHTML =
-        `<input class="tname" id="cn${i}" placeholder="自訂項目（例：手鍊）" maxlength="10">` +
-        `<input class="tnum" id="cv${i}" inputmode="numeric" placeholder="數字">`;
-      box.appendChild(div);
-      div.querySelector(".tname").focus();
-      if(n + 1 >= TOOL_CUSTOM_MAX) addBtn.style.display = "none";
+      if(n >= TOOL_ROWS_MAX) return;
+      const tmp = document.createElement("div");
+      tmp.innerHTML = toolRowHTML(n);
+      const row = tmp.firstElementChild;
+      box.appendChild(row);
+      bindRow(row);
+      refresh();
+      const nameEl = row.querySelector(".tname");
+      if(nameEl) nameEl.focus();
     };
   }
   runBtn.onclick = runTool;
@@ -1054,19 +1221,15 @@ function runTool(){
   const out = document.getElementById("toolOut");
   if(!out) return;
 
-  // 收集固定項目
+  // 收集所有自由填寫的欄位。
+  // 只取數字，英文字母（如身分證開頭的 M）會被忽略——
+  // 數字易經只看 1–9，字母不入卦。
   const entries = [];
-  TOOL_ITEMS.forEach(it=>{
-    const el = document.getElementById("t_"+it.id);
-    const v = el ? String(el.value).replace(/[^0-9]/g,"") : "";
-    if(v.length >= 2) entries.push({ label: it.label, digits: v, fixed: !!it.fixed });
-  });
-  // 收集自訂項目
-  document.querySelectorAll("#toolCustom .trow").forEach((row,i)=>{
+  document.querySelectorAll("#toolRows .trow").forEach((row,i)=>{
     const nameEl = row.querySelector(".tname"), numEl = row.querySelector(".tnum");
     const nm = nameEl ? nameEl.value.trim() : "";
     const v  = numEl ? String(numEl.value).replace(/[^0-9]/g,"") : "";
-    if(v.length >= 2) entries.push({ label: nm || `自訂 ${i+1}`, digits: v, custom:true });
+    if(v.length >= 2) entries.push({ label: nm || `項目 ${i+1}`, digits: v });
   });
 
   if(!entries.length){
@@ -1155,16 +1318,16 @@ function runTool(){
         <p>你的號碼中已具備${u.need.join("、")}，補上了本命缺少的部分。</p></div>`).join("")}
       ${stillBad.map(u=>`
         <div class="res no"><div class="h">${u.field}　仍未化解</div>
-        <p>需要${u.missing.join("、")}才能化解。建議優先從<b>電話</b>或<b>銀行帳號</b>著手——
-           這兩項最容易更換，效果也最直接。可用組合：${
+        <p>需要${u.missing.join("、")}才能化解。建議優先從<b>最容易更換的號碼</b>著手（多半是電話或銀行帳號），
+           效果最直接。可用組合：${
              u.missing.map(f=>PAIR_MAP[f].slice(0,4).join("、")).join("；")}</p></div>`).join("")}`}
 
     <p class="q">給你的行動建議</p>
     <p>${
       worst.a.score < 55
         ? `你的「${worst.label}」分數偏低（${worst.a.score}）。${
-            worst.fixed ? "這一項無法更動，建議用電話或銀行帳號來平衡。"
-                        : "這一項是可以更換的，優先處理它效益最大。"}`
+            "若這一項可以更換，優先處理它效益最大；若不易更動（例如身分證），" +
+            "就用其他容易更換的號碼來平衡。"}`
         : avg >= 75
           ? "你目前的後天數字整體相當不錯，不需要大動作調整，維持即可。"
           : "你的後天數字沒有明顯問題，但仍有優化空間。換號碼時挑上面列出的組合即可。"
@@ -1178,6 +1341,11 @@ function runTool(){
 /* ── 翻頁 ── */
 function showPage(i, back=false){
   if(i<0||i>=pages.length) return;
+  // 解鎖後翻過一輪，高亮自然收起
+  if(justUnlocked && i !== pageIdx){
+    unlockedTurns++;
+    if(unlockedTurns >= pages.length){ justUnlocked = false; }
+  }
   pageIdx=i;
   document.querySelectorAll("#pages .page").forEach((el,k)=>{
     el.classList.toggle("rev", back);
@@ -1224,6 +1392,28 @@ addEventListener("keydown",e=>{
 });
 
 /* ── 銷售頁 ── */
+/* ══════════════════════════════════════════════════════════
+   解鎖
+   完成付款後：切換狀態 → 就地重建報告 → 回到第一頁 →
+   頂端出現解鎖橫幅，各章節先前隱藏的段落隨之顯現並亮起。
+   ══════════════════════════════════════════════════════════ */
+function doUnlock(){
+  if(unlocked) return;
+  unlocked = true;
+  justUnlocked = true;
+  unlockedTurns = 0;
+  document.getElementById("book").classList.add("unlocked");
+  go("result");                       // 重建並回到第一頁
+  showBanner();
+}
+
+function showBanner(){
+  const b = document.getElementById("unlockBar");
+  if(!b) return;
+  b.textContent = "完 整 報 告 已 解 鎖";
+  b.classList.add("on");
+}
+
 function renderSales(){
   const r=report, c=chart, mg=magRep;
   const teaser = mg.resolve.unresolved.length
@@ -1271,19 +1461,126 @@ function renderSales(){
     </div>`;
   document.getElementById("sales").scrollTop=0;
   document.getElementById("buy").onclick = ()=>{
-    // 此處接金流。付費完成後應導向 unlock.html（或帶 reportId 的報告頁）。
-    alert("此處接金流。\n\n付費後的完整報告樣貌，\n請開啟 unlock.html 檢視。");
+    /* 正式上線時改為呼叫平台內購（StoreKit / Play Billing），
+       驗證成功後才呼叫 doUnlock()。
+       DEV_UNLOCK_OPEN 為 true 時直接解鎖，方便自我審核付費內容。 */
+    const ok = confirm(
+      "解鎖完整報告\n\n" +
+      "包含桃花與正緣、未來五年流年、一生命運走向、\n" +
+      "大運 0–120 歲、數字檢測工具與完整分析總表。\n\n" +
+      "確認要解鎖嗎？"
+    );
+    if(!ok) return;
+    if(DEV_UNLOCK_OPEN){ doUnlock(); }
+    else { alert("此處接平台內購。上線前請串接 StoreKit / Play Billing。"); }
   };
   document.getElementById("backFree").onclick = ()=>go("result", true);
 }
 
 function restart(){
   cancelAutoSubmit();
+  // 重新測算視為新的一次占卜，解鎖狀態一併重置
+  unlocked = false; justUnlocked = false; unlockedTurns = 0;
+  document.getElementById("book").classList.remove("unlocked");
+  const bar = document.getElementById("unlockBar");
+  if(bar) bar.classList.remove("on");
   document.getElementById("bd").value="";
   document.getElementById("err").textContent="";
   chart=null; report=null; magnet=null; magRep=null;
   go("intro");
 }
+
+
+/* ══════════════════════════════════════════════════════════
+   關於／設定面板
+   上架 App Store 與 Google Play 的必備項目：
+     · 隱私權政策（兩平台皆強制）
+     · 服務條款
+     · 免責聲明（占卜類 App 必須聲明僅供娛樂參考）
+     · 客服聯繫方式（Apple 要求提供 Support URL）
+     · 恢復購買（Apple 強制要求，否則審核不過）
+     · 版本資訊
+   ⚠️ 下方的 APP_INFO 內容須在上架前填入真實資料。
+   ══════════════════════════════════════════════════════════ */
+const APP_INFO = {
+  name: "生命靈數占卜",
+  version: "1.0.0",
+  company: "（請填入公司或個人名稱）",
+  email: "（請填入客服信箱）",
+  privacyUrl: "（請填入隱私權政策網址）",
+  termsUrl: "（請填入服務條款網址）",
+};
+
+function renderAbout(){
+  const el = document.getElementById("about");
+  el.innerHTML = `
+    <div class="abox">
+      <button class="aclose" id="aboutClose" aria-label="關閉">×</button>
+      <div class="alogo">${APP_INFO.name}</div>
+      <div class="aver">版本 ${APP_INFO.version}</div>
+
+      <div class="asec">
+        <h4>免責聲明</h4>
+        <p>本程式所提供的內容，係依生命靈數與數字易經的推算規則產生，
+           僅供自我探索與娛樂參考，<b>不構成醫療、法律、財務或投資上的建議</b>。
+           任何重大決定請諮詢相關領域的專業人士。</p>
+        <p>命理推算無法預測未來，也不保證任何結果。
+           報告中提到的傾向與提醒，是統計性的參考，而非個人化的預言。</p>
+      </div>
+
+      <div class="asec">
+        <h4>隱私與資料</h4>
+        <p>本程式<b>不會儲存或上傳</b>你輸入的任何資料。
+           出生日期與號碼僅在你的裝置上運算，
+           關閉程式後即消失，我們的伺服器不會留下任何記錄。</p>
+        <p>本程式不收集個人識別資訊、不使用追蹤器、不投放廣告。</p>
+      </div>
+
+      <div class="asec">
+        <h4>購買與退款</h4>
+        <p>完整報告為一次性解鎖，透過平台官方的應用程式內購買機制進行。
+           如需恢復先前的購買，請點擊下方按鈕。</p>
+        <button class="abtn" id="restorePurchase">恢 復 購 買</button>
+        <p class="adim">退款請依 App Store 或 Google Play 的退款流程辦理。</p>
+      </div>
+
+      <div class="asec">
+        <h4>聯繫客服</h4>
+        <p>使用上有任何問題、發現錯誤，或對報告內容有疑問，
+           歡迎來信，我們會在三個工作天內回覆。</p>
+        <button class="abtn" id="contactSupport">寄 信 給 客 服</button>
+        <p class="adim">${APP_INFO.email}</p>
+      </div>
+
+      <div class="asec alinks">
+        <button class="alink" id="linkPrivacy">隱私權政策</button>
+        <button class="alink" id="linkTerms">服務條款</button>
+      </div>
+
+      <p class="acopy">© ${new Date().getFullYear()} ${APP_INFO.company}</p>
+    </div>`;
+
+  document.getElementById("aboutClose").onclick = closeAbout;
+  document.getElementById("restorePurchase").onclick = ()=>{
+    // 上架時改為呼叫平台的恢復購買 API（StoreKit / Play Billing）
+    alert("恢復購買\n\n上架後此處會連線至平台帳號，\n自動恢復你先前的購買記錄。");
+  };
+  document.getElementById("contactSupport").onclick = ()=>{
+    const subject = encodeURIComponent(`${APP_INFO.name} 意見回饋（v${APP_INFO.version}）`);
+    location.href = `mailto:${APP_INFO.email}?subject=${subject}`;
+  };
+  document.getElementById("linkPrivacy").onclick = ()=>{ window.open(APP_INFO.privacyUrl, "_blank"); };
+  document.getElementById("linkTerms").onclick   = ()=>{ window.open(APP_INFO.termsUrl, "_blank"); };
+}
+
+function openAbout(){
+  renderAbout();
+  document.getElementById("about").classList.add("on");
+}
+function closeAbout(){
+  document.getElementById("about").classList.remove("on");
+}
+document.getElementById("aboutBtn").addEventListener("click", openAbout);
 
 /* ── 啟動 ── */
 layout(); setHots(); go("intro");

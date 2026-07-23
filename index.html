@@ -3,24 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>生命靈數占卜｜完整報告</title>
+<title>生命靈數占卜</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- 全部為 SIL OFL 1.1 開源字型，可自由商用。
      無網路時會自動退回系統字型，版面不受影響。 -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Reggae+One&family=Dela+Gothic+One&display=swap">
 <link rel="stylesheet" href="src/app.css">
-<style>#unlockTag{position:fixed;top:0;left:0;right:0;z-index:99;text-align:center;
-  padding:5px;font-size:10.5px;letter-spacing:.3em;color:#0B0E1A;
-  background:linear-gradient(90deg,#C9A227,#E0B94A);font-family:sans-serif}
-  #stage{padding-top:0}</style>
 </head>
 <body>
-<div id="unlockTag">完 整 報 告 ・ 已 解 鎖</div>
 
 <audio id="bgm" loop preload="auto"></audio>
 
+<div id="unlockBar"></div>
+
 <div id="stage">
+  <button id="aboutBtn" aria-label="關於與設定" title="關於">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+         stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+      <circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.5" r=".6" fill="currentColor"/>
+    </svg>
+  </button>
   <button id="mute" aria-label="背景音樂開關" title="背景音樂">
     <svg viewBox="0 0 24 24" width="17" height="17" fill="none"
          stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
@@ -77,16 +80,12 @@
   <div id="sales"></div>
 </div>
 
+<div id="about"></div>
+
 <script src="src/engine.js"></script>
 <script src="src/content.js"></script>
 <script src="src/magnetic.js"></script>
 <script src="src/magnetic-content.js"></script>
-<script>
-/* ═══════════════════════════════════════
-   付費版：所有章節完整揭曉，並開放數字檢測工具
-   ═══════════════════════════════════════ */
-window.UNLOCKED = true;
-</script>
 <script src="src/app.js"></script>
 </body>
 </html>
