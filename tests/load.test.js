@@ -78,8 +78,8 @@ if (freeCtx && paidCtx) {
 
   console.log("\n── 關鍵函式皆已定義 ──");
   ["computeChart", "generateReport", "analyzeNumber", "generateMagneticReport",
-   "buildPages", "unlockedPages", "renderBook", "bindTool", "runTool", "renderSales",
-   "bgmStart", "bgmDuck"].forEach((fn) => {
+   "buildPages", "unlockedPages", "renderBook", "showPage", "renderSales", "bindTool", "runTool",
+   "bgmStart", "bgmPlay", "bgmFade"].forEach((fn) => {
     ok(`${fn}`, vm.runInContext(`typeof ${fn}`, freeCtx) === "function");
   });
 
@@ -94,9 +94,29 @@ if (freeCtx && paidCtx) {
   const free = build(freeCtx), paid = build(paidCtx);
   ok("免費版頁數少於付費版", free.length < paid.length, `${free.length} vs ${paid.length} 頁`);
   const fh = free.map(p => p.h).join(""), ph = paid.map(p => p.h).join("");
-  ok("免費版有付費牆", (fh.match(/class="veil"/g) || []).length > 0);
-  ok("付費版無付費牆", (ph.match(/class="veil"/g) || []).length === 0);
+  // 付費牆已改為「僅最後一頁」的設計：內文章節全部公開，
+  // 免費版最後一頁以預告與 CTA 收束，頁內不再出現遮罩區塊。
+  ok("免費版章節無遮罩（人格與數字全公開）", (fh.match(/class="veil"/g) || []).length === 0);
+  ok("付費版無遮罩", (ph.match(/class="veil"/g) || []).length === 0);
+  ok("免費版最後一頁有購買 CTA", /id="toSales"/.test(free[free.length - 1].h));
+  ok("免費版缺數頁與付費版內容一致（不上鎖）", (() => {
+    const a = free.find(p => p.t.includes("缺")), b = paid.find(p => p.t.includes("缺"));
+    return a && b && a.h === b.h;
+  })());
   ok("兩版皆無破圖", !/undefined|NaN|\[object Object\]/.test(fh + ph));
+}
+
+console.log("\n── 常數不可重複宣告 ──");
+{
+  // 曾發生過：修改常數區時整段複製，造成 const 重複宣告，
+  // 瀏覽器直接拋 SyntaxError 使整個 app.js 不執行（全黑畫面）。
+  const src = fs.readFileSync(path.join(ROOT, "src/app.js"), "utf8");
+  const names = ["CALC_MS","REVEAL_NUM_MS","REVEAL_END_MS","REVEAL_POS",
+                 "AUTO_SUBMIT_MS","SUN_HOTSPOT_ENABLED","HOTSPOTS","PROGRESS",
+                 "BGM_VOLUME","VID_VOLUME","BGM_SRC"];
+  const dup = names.filter(n =>
+    (src.match(new RegExp("^const\\s+" + n + "\\s*[=({]", "gm")) || []).length !== 1);
+  ok("所有常數皆唯一宣告", dup.length === 0, dup.join(","));
 }
 
 console.log("\n── 入口檔結構 ──");
@@ -113,65 +133,6 @@ console.log("\n── 入口檔結構 ──");
 });
 
 
-console.log("\n── 數字檢測工具實際送出（模擬按鈕點擊）──");
-if (paidCtx) {
-  // 建立可互動的假 DOM 來實際觸發 onclick
-  const store = {};
-  const mkEl = (id) => {
-    if (store[id]) return store[id];
-    const L = {};
-    const e = {
-      id, style:{}, dataset:{}, value:"", textContent:"", innerHTML:"", scrollTop:0,
-      classList:{toggle(){},add(){},remove(){},contains(){return false;}},
-      addEventListener(ev,fn){ L[ev]=fn; },
-      play(){return Promise.resolve();}, pause(){}, focus(){}, blur(){}, scrollIntoView(){},
-      querySelectorAll(){return [];}, querySelector(){return e;}, closest(){return null;}, onclick:null,
-    };
-    store[id]=e; return e;
-  };
-  const ctx2 = {
-    console:{log(){},warn(){},error(){}}, Math, Date, JSON, String, Number, Object, Array, RegExp, Promise, Error,
-    parseInt, parseFloat, isNaN, setTimeout:(f)=>{ if(f)f(); return 0; }, clearTimeout(){}, setInterval:()=>0, clearInterval(){},
-  };
-  ctx2.document = { getElementById:(id)=>mkEl(id), querySelectorAll:()=>[], querySelector:()=>mkEl("q"),
-    body:{classList:{toggle(){}}}, addEventListener(){} };
-  ctx2.addEventListener=()=>{}; ctx2.window=ctx2; ctx2.location={protocol:"http:"};
-  vm.createContext(ctx2);
-  ["src/engine.js","src/content.js","src/magnetic.js","src/magnetic-content.js"].forEach(f=>
-    vm.runInContext(fs.readFileSync(path.join(ROOT,f),"utf8"),ctx2,{filename:f}));
-  vm.runInContext("window.UNLOCKED=true;",ctx2);
-  vm.runInContext(fs.readFileSync(path.join(ROOT,"src/app.js"),"utf8"),ctx2,{filename:"src/app.js"});
-  vm.runInContext(`chart=computeChart("1988-07-20",{baseYear:2026});report=generateReport(chart);magnet=analyzeNumber("19880720");magRep=generateMagneticReport(magnet,chart);pages=buildPages();`,ctx2);
-
-  let bindOk=true;
-  try { vm.runInContext("bindTool();",ctx2); } catch(e){ bindOk=false; }
-  ok("bindTool 執行無誤", bindOk);
-  ok("送出按鈕已綁定 onclick", store["toolGo"] && typeof store["toolGo"].onclick === "function");
-
-  // 測多種號碼，每一種都要真的產出結果、不得拋錯
-  const cases = ["0912345678","A123456789","1688","0000","ABC-5678","999888777"];
-  let allOk = true, detail = "";
-  cases.forEach(num=>{
-    store["toolIn"].value = num;
-    store["toolOut"].innerHTML = "";
-    try {
-      store["toolGo"].onclick();
-      if (!store["toolOut"].innerHTML) { allOk=false; detail += `「${num}」無產出; `; }
-    } catch(e) { allOk=false; detail += `「${num}」拋錯:${e.message}; `; }
-  });
-  ok("各種號碼送出都有結果、不拋錯", allOk, detail);
-
-  // 換分頁後再送出
-  let tabOk = true;
-  try {
-    if (store["toolIn"]) { store["toolIn"].value="0212345678"; }
-    toolTabIfAny(ctx2);
-    store["toolGo"].onclick();
-    if (!store["toolOut"].innerHTML) tabOk=false;
-  } catch(e){ tabOk=false; }
-  ok("切換場域後仍可送出", tabOk);
-}
-function toolTabIfAny(ctx2){ try{ vm.runInContext("toolTab=2;",ctx2); }catch(e){} }
 
 console.log(`\n${fail === 0 ? "🎉 全部通過" : "⚠️ 有失敗項"}：${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

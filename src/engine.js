@@ -269,6 +269,145 @@ function matchNumbers(element) {
   };
 }
 
+/* ---------- 5.6 九宮格連線 ---------- */
+
+/**
+ * 九宮格排列（由左上至右下填入 1–9）：
+ *     1 2 3
+ *     4 5 6
+ *     7 8 9
+ * 此排列使 1-5-9 與 3-5-7 恰為兩條對角線，與各家連線命名相符。
+ */
+const GRID = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+
+/**
+ * 八條連線。名稱採台灣生命靈數常見說法，
+ * 部分連線各派別叫法略有出入，此處取流通度最高者並加註別名。
+ */
+const GRID_LINES = [
+  { id: "123", nums: [1, 2, 3], name: "藝術線", alias: "行動線", kind: "row" },
+  { id: "456", nums: [4, 5, 6], name: "組織線", alias: "知能主線", kind: "row" },
+  { id: "789", nums: [7, 8, 9], name: "貴人線", alias: "權力線", kind: "row" },
+  { id: "147", nums: [1, 4, 7], name: "務實線", alias: "執行力線", kind: "col" },
+  { id: "258", nums: [2, 5, 8], name: "感情線", alias: "心智線", kind: "col" },
+  { id: "369", nums: [3, 6, 9], name: "智慧線", alias: "創意線", kind: "col" },
+  { id: "159", nums: [1, 5, 9], name: "事業線", alias: "目標線", kind: "diag" },
+  { id: "357", nums: [3, 5, 7], name: "財智線", alias: "人緣線", kind: "diag" },
+];
+
+/**
+ * 計算九宮格。
+ *
+ * 入格數字＝先天數（出生年月日各位數）＋後天數（歸一前兩位數拆開）＋主命數。
+ * 0 不入格（九宮格只有 1–9）。
+ * 同一數字出現多次即在格內累加，次數越多能量越強。
+ */
+function buildGrid(y, m, d, io, life) {
+  const count = {};
+  for (let i = 1; i <= 9; i++) count[i] = 0;
+
+  const push = (n) => { if (n >= 1 && n <= 9) count[n]++; };
+
+  // 先天數
+  `${y}${String(m).padStart(2, "0")}${String(d).padStart(2, "0")}`
+    .split("").map(Number).forEach(push);
+  // 後天數（單位數時只有一個）
+  if (io.singleDigit) push(io.rawSum);
+  else { push(io.inner); push(io.outer); }
+  // 主命數（大師數拆為兩位再入格，例如 11 → 1、1）
+  if (life >= 10) String(life).split("").map(Number).forEach(push);
+  else push(life);
+
+  const present = [];
+  const missing = [];
+  for (let i = 1; i <= 9; i++) (count[i] ? present : missing).push(i);
+
+  // 判定連線
+  const lines = GRID_LINES.map((L) => {
+    const on = L.nums.every((n) => count[n] > 0);
+    const strength = L.nums.reduce((s, n) => s + count[n], 0);
+    const weakest = L.nums.reduce((a, n) => (count[n] < count[a] ? n : a), L.nums[0]);
+    const lacking = L.nums.filter((n) => !count[n]);
+    return { ...L, on, strength, weakest, lacking };
+  });
+
+  const onLines = lines.filter((l) => l.on);
+
+  /* 連線能量（0–100）
+     以「條數」為主、「強度」為輔。
+     強度需設上限，否則單一數字重複多次（如生日含三個 8）
+     就能把分數推到頂，與實際格局豐富度不符。
+     校準目標：無連線約 25–36、全連線約 95，中位數落在 55–60。 */
+  const totalStrength = onLines.reduce((s, l) => s + l.strength, 0);
+  const energy = onLines.length === 0
+    ? Math.max(20, Math.min(38, Math.round(20 + present.length * 2.2)))
+    : Math.min(96, Math.round(30 + onLines.length * 6.5 + Math.min(totalStrength, 32) * 0.45));
+
+  return {
+    grid: GRID,
+    count,
+    present,
+    missing,
+    lines,
+    onLines,
+    onCount: onLines.length,
+    // 最強連線：條件相同時取排序在前者，確保結果穩定可重現
+    strongest: onLines.length
+      ? onLines.reduce((a, l) => (l.strength > a.strength ? l : a), onLines[0])
+      : null,
+    // 差一個數字就能成形的連線，是最值得補的方向
+    nearMiss: lines.filter((l) => !l.on && l.lacking.length === 1),
+    energy,
+    maxCount: Math.max(...Object.values(count)),
+  };
+}
+
+/* ---------- 5.7 大運：0–120 歲的階段推算 ---------- */
+
+/**
+ * 大運以九年為一步，自出生起算，推至 120 歲（共 14 步）。
+ *
+ * 每步的大運數 = 主命數 + 步數，再歸一至 1–9。
+ * 如此每九步循環一次（81 年），與流年的九年小循環形成大小雙循環，
+ * 這是本系統的推法；各家排大運方式不同，此處採可完整複現的算法。
+ *
+ * ⚠️ 大運數與流年數不同：
+ *    流年逐年變動，看的是當年的節奏；
+ *    大運九年一變，看的是整個人生階段的基調。
+ */
+const DAYUN_SPAN = 9;
+const DAYUN_MAX_AGE = 120;
+
+function buildDayun(life, personalYearNow, birthYear, baseYear) {
+  const currentAge = baseYear - birthYear;
+  const steps = [];
+
+  for (let k = 0; k * DAYUN_SPAN < DAYUN_MAX_AGE; k++) {
+    const from = k * DAYUN_SPAN;
+    const to = Math.min(from + DAYUN_SPAN - 1, DAYUN_MAX_AGE);
+    // 大運數：主命數推進 k 步
+    const num = reduceFull(life + k);
+    steps.push({
+      index: k,
+      from, to,
+      num,
+      years: [birthYear + from, birthYear + to],
+      current: currentAge >= from && currentAge <= to,
+      past: currentAge > to,
+    });
+  }
+
+  const currentStep = steps.find((s) => s.current) || null;
+  return {
+    currentAge,
+    span: DAYUN_SPAN,
+    maxAge: DAYUN_MAX_AGE,
+    steps,
+    currentStep,
+    currentIndex: currentStep ? currentStep.index : -1,
+  };
+}
+
 /* ---------- 6. 主計算函式 ---------- */
 
 /**
@@ -290,6 +429,8 @@ function computeChart(dateStr, opts = {}) {
   const personalYear = personalYearNumber(m, d, baseYear);
   const io = innerOuterNumbers(y, m, d);
   const innate = innateDigits(y, m, d);
+  const grid = buildGrid(y, m, d, io, life);
+  const dayun = buildDayun(life, personalYear, y, baseYear);
 
   const element = ELEMENT_MAP[life];
   const match = matchNumbers(element);
@@ -354,6 +495,10 @@ function computeChart(dateStr, opts = {}) {
 
     // 先天數：缺數與重複數
     innate,
+    // 九宮格與連線
+    grid,
+    // 大運（0–120 歲）
+    dayun,
     // 契合數字
     match,
 
@@ -373,7 +518,8 @@ if (typeof module !== "undefined") {
   module.exports = {
     computeChart, validateDate, reduce, reduceFull,
     lifePathNumber, talentNumber, attitudeNumber, personalYearNumber, innerOuterNumbers, innerOuterGap,
-    innateDigits, matchNumbers,
+    innateDigits, matchNumbers, buildGrid, buildDayun,
+    GRID, GRID_LINES,
     DIMENSIONS, DIMENSION_COLORS, ELEMENT_MAP, ELEMENT_NUMBERS, MASTER_NUMBERS,
   };
 }

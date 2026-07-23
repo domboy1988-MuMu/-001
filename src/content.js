@@ -309,6 +309,308 @@ const COLOR_WHY = {
 };
 
 /* ============================================================
+   1.98 九宮格連線解讀
+   ⚠️ 名稱說明：以下八條為正統九宮格連線。
+      使用者常提到的「婚姻線」「命運線」屬手相系統，
+      九宮格並無對應連線，因此另由態度數與主命數推導，
+      並於報告中註明來源，不冒充為格內連線。
+   ============================================================ */
+
+const LINE_INFO = {
+  "123": {
+    title: "藝術線", alias: "行動線",
+    onText: "你對美感與形式有天生的直覺。看到不對稱、配色怪異的東西會下意識想調整，這種敏銳在需要品味的場合是硬實力。你也比一般人更敢把想法直接做出來。",
+    offText: "你的審美偏向實用而非形式，喜歡「能用就好」。這不是缺點，只是在需要包裝與呈現的場合，記得找一個對美感敏感的人搭配。",
+    key: "美感與自信",
+  },
+  "456": {
+    title: "組織線", alias: "知能主線",
+    onText: "你天生會把混亂變成秩序。別人看到一堆事情會慌，你看到的是「先做哪個、誰負責、什麼時候交」。這條線讓你在管理位置上特別順。",
+    offText: "你的長處不在流程與制度。與其逼自己做細膩的規劃，不如把架構交給擅長的人，你專注在方向與判斷上。",
+    key: "組織與執行",
+  },
+  "789": {
+    title: "貴人線", alias: "權力線",
+    onText: "你一生不缺貴人。關鍵時刻總有人拉你一把，而且往往不是你開口求來的。這條線也主財務掌控力，你對錢的流向比一般人敏感。",
+    offText: "你的人生偏向自力更生。不是沒有貴人，而是需要你先主動釋出善意，關係才會回饋給你——別人不會自己想到你。",
+    key: "貴人與財務",
+  },
+  "147": {
+    title: "務實線", alias: "執行力線",
+    onText: "你說到做到。想法一旦成形你就會開始動手，不會停在紙上談兵。這條線的人做事有始有終，是團隊裡最讓人放心的存在。",
+    offText: "你的想法常常多過於完成品。不是不努力，而是需要外部的截止日與夥伴來推你一把，單靠自律容易拖延。",
+    key: "行動與落實",
+  },
+  "258": {
+    title: "感情線", alias: "心智線",
+    onText: "你的情感濃度高，感受得深，也容易被關係牽動。你懂得察覺別人的情緒，這讓你在關係中付出得多，但也更容易受傷。",
+    offText: "你在情感上偏理性，不容易被情緒淹沒。旁人可能覺得你冷靜甚至冷淡，但這讓你在關鍵時刻能做出正確判斷。",
+    key: "情感與人際",
+  },
+  "369": {
+    title: "智慧線", alias: "創意線",
+    onText: "你的腦子轉得快，聯想力強，常常能把不相干的事情連起來。這條線的人適合需要創意與思辨的工作，坐辦公室做重複的事會把你悶壞。",
+    offText: "你的思考偏向線性與務實，一步一步來。這在需要穩定產出的領域是優勢，但遇到需要跳躍性創意的任務時，記得借助他人的腦袋。",
+    key: "創意與思辨",
+  },
+  "159": {
+    title: "事業線", alias: "目標線",
+    onText: "你認定的事情會做到底。這條線是八條裡最與「成功」直接相關的——不是聰明或運氣，是耐得住寂寞的持續力。長期戰你會贏。",
+    offText: "你的動力來自興趣而非目標。與其逼自己苦撐，不如找到真正想做的事——你在熱情驅動下的爆發力，遠勝過硬撐的堅持。",
+    key: "堅持與目標",
+  },
+  "357": {
+    title: "財智線", alias: "人緣線",
+    onText: "你人緣好，而且懂得把人脈轉成機會。這條線兼具社交魅力與財務嗅覺，你能在輕鬆的往來中談成事情，不需要硬推。",
+    offText: "你的人際偏向深交而非廣結。朋友不多但都真心，這在長期是資產。若要拓展財路，記得刻意走出舒適圈認識新的人。",
+    key: "人緣與財路",
+  },
+};
+
+/** 依連線狀態組出「九宮格與連線」章節 */
+function gridReading(grid, numbers, io) {
+  const lines = grid.lines.map((L) => ({
+    ...L,
+    ...LINE_INFO[L.id],
+    // ⚠️ 先展開 LINE_INFO 再覆寫 on，確保布林值不被文案欄位蓋掉。
+    //    欄位已改名為 onText/offText，此處再明確保留 L.on 作雙重保險。
+    on: L.on,
+    text: L.on ? LINE_INFO[L.id].onText : LINE_INFO[L.id].offText,
+  }));
+
+  const on = lines.filter((l) => l.on);
+  const off = lines.filter((l) => !l.on);
+
+  // 能量總評
+  let verdict;
+  if (grid.onCount === 0) {
+    verdict = "你的九宮格沒有形成連線。這代表你的能量分散在各處，沒有特別突出的單一天賦，但也不受限於固定模式——人生的起伏會比較大，掌握流年節奏對你格外重要。";
+  } else if (grid.onCount <= 2) {
+    verdict = `你有 ${grid.onCount} 條連線，屬於專注型格局。你的天賦集中在特定面向，發揮得好會很突出，但要留意其他面向需要刻意補強。`;
+  } else if (grid.onCount <= 4) {
+    verdict = `你有 ${grid.onCount} 條連線，格局相當均衡。多數面向都有基礎，遇到不同型態的挑戰時都能應付，是很好用的命盤。`;
+  } else if (grid.onCount <= 6) {
+    verdict = `你有 ${grid.onCount} 條連線，屬於能量豐沛的格局。這在統計上已是少數，代表你先天具備多方面的條件——真正的課題不是能不能，而是要選哪一條路。`;
+  } else {
+    verdict = `你有 ${grid.onCount} 條連線，接近全連線格局。這在命盤中極為罕見，古來稱為「擁有選擇能力的人」——什麼都做得來，但也因此最容易迷失方向。`;
+  }
+
+  // 婚姻線與命運線（非格內連線，另行推導並註明）
+  const marriage = {
+    label: "婚姻線",
+    source: `由態度數 ${numbers.attitude} 與感情線狀態推導（非九宮格連線）`,
+    text: grid.lines.find((l) => l.id === "258").on
+      ? `你的感情線成形，加上態度數 ${numbers.attitude}——你在婚姻中投入得深，也期待對方同等回應。這使你的關係品質很高，但一旦失衡，受傷的程度也會比別人重。`
+      : `你的感情線未成形，加上態度數 ${numbers.attitude}——你在婚姻中偏理性，不會被情緒牽著走。這讓關係穩定，但要記得偶爾把感受說出口，對方需要聽見。`,
+  };
+  const destiny = {
+    label: "命運線",
+    source: `即主命數 ${numbers.life}，搭配內在 ${io.inner}／外在 ${io.outer}（非九宮格連線）`,
+    text: `主命數 ${numbers.life} 是你人生的主軸——它決定你反覆遇到的情境與課題。內在 ${io.inner}、外在 ${io.outer} 則決定你面對這些情境時的反應方式。命運不是註定的劇本，而是你會一再走回的那條路；認出它，你才有機會換個走法。`,
+  };
+
+  return {
+    grid: grid.grid,
+    count: grid.count,
+    present: grid.present,
+    missing: grid.missing,
+    lines, on, off,
+    onCount: grid.onCount,
+    energy: grid.energy,
+    verdict,
+    strongest: grid.strongest ? { ...grid.strongest, ...LINE_INFO[grid.strongest.id] } : null,
+    nearMiss: grid.nearMiss.map((l) => ({ ...l, ...LINE_INFO[l.id] })),
+    marriage, destiny,
+  };
+}
+
+/* ============================================================
+   1.99 大運：0–120 歲的階段解讀
+   ============================================================ */
+
+/** 九個大運數的基調（九年一步的整體氣候，非單年運勢） */
+const DAYUN_INFO = {
+  1: { name: "開創運", theme: "起步與獨立",
+       desc: "這九年是新局的起點。你會被推著去做決定、去承擔，很多事情沒有前例可循，只能自己摸索。這階段的努力多半不會立刻看到成果，但它決定了後面幾十年的方向。",
+       watch: "容易因為急著證明自己而做出過快的決定。重大的投入建議放慢半年再確認。",
+       good: "適合創業、轉職、搬遷、開始長期的學習或投資。" },
+  2: { name: "協和運", theme: "關係與合作",
+       desc: "這九年的重心會從「自己」轉到「關係」。無論是伴侶、家人還是合作對象，你的際遇很大程度取決於身邊的人。這階段學會的東西，多半是靠別人教你的。",
+       watch: "過度配合而累積委屈是這階段最常見的耗損。該說的話要說出口。",
+       good: "適合結婚、合夥、談長期合約、修復破裂的關係。" },
+  3: { name: "綻放運", theme: "表達與被看見",
+       desc: "這九年你的能見度會明顯提高。作品、想法、專業能力容易被外界注意到，社交圈也會擴大。機會變多，但也更容易分心。",
+       watch: "同時開太多線是這階段最大的浪費。選兩件做深，勝過五件做淺。",
+       good: "適合發表、行銷、經營個人品牌、擴展人脈。" },
+  4: { name: "築基運", theme: "扎根與整頓",
+       desc: "這九年會忙、會累，而且辛苦不太被看見。你在打地基——制度、技能、資產、健康，都是這階段慢慢累積的。表面上進展緩慢，但地基的厚度決定你後面能蓋多高。",
+       watch: "容易陷入「只是在撐」的疲乏感。務必安排固定的休息，否則會在下一階段付出代價。",
+       good: "適合考證照、置產、整理財務、建立長期的生活習慣。" },
+  5: { name: "變動運", theme: "轉換與自由",
+       desc: "這九年是整個循環裡變化最劇烈的一段。搬遷、換跑道、關係轉折、出國，都容易在這階段發生。舊的框架會鬆動，讓你有機會重新選擇。",
+       watch: "這階段要特別留意交通與意外——變動多、移動多，節奏也快，容易疏忽。開車、出遠門前多檢查一次。另外，別在情緒上頭時做不可逆的決定。",
+       good: "適合改變環境、嘗試新領域、結束不適合的關係。" },
+  6: { name: "承擔運", theme: "責任與家庭",
+       desc: "這九年你會被需要。家庭、伴侶、下一代或年長的長輩，會有人需要你撐著。你的角色從「被照顧」轉為「照顧人」。",
+       watch: "把所有人的事都扛在身上會壓垮你。要練習分擔，也要允許別人做得沒你好。",
+       good: "適合成家、生育、承接家業、擔任管理職。" },
+  7: { name: "沉潛運", theme: "內省與修復",
+       desc: "這九年外在的進展會慢下來，但內在會有重要的整理。你可能會對過去的選擇產生懷疑，也可能開始接觸過去不感興趣的領域。這不是停滯，是換檔。",
+       watch: "健康與心理狀態要放在第一位。這階段身體的訊號往往是累積多年的結果，別再拖。",
+       good: "適合進修、研究、療癒、重新規劃人生方向。不適合大舉擴張。" },
+  8: { name: "收成運", theme: "成果與資源",
+       desc: "這九年是整個循環裡能量最強的一段。前面累積的東西會在這階段變現——金錢、地位、影響力都可能明顯成長。也是責任最重、壓力最大的階段。",
+       watch: "順風時容易高估自己。擴張前務必留下退路，別把所有資源押在同一件事上。",
+       good: "適合投資、擴張、談判、爭取升遷與更好的條件。" },
+  9: { name: "收束運", theme: "結束與放下",
+       desc: "這九年是一個大循環的尾聲。該結束的會結束，不適合的人事物會自然脫落。你可能會經歷失去，但那多半是在為下一個循環清出空間。",
+       watch: "這階段的失落感是設計好的，不必抗拒。但也要留意情緒低落轉為長期的消沉。",
+       good: "適合結案、交接、斷捨離、整理一生的經驗。不適合啟動大計畫。" },
+};
+
+/** 人生階段的名稱（依年齡區間，與大運數無關） */
+function lifePhaseName(from) {
+  if (from < 9)   return "啟蒙期";
+  if (from < 18)  return "成長期";
+  if (from < 27)  return "探索期";
+  if (from < 36)  return "立基期";
+  if (from < 45)  return "壯年期";
+  if (from < 54)  return "轉折期";
+  if (from < 63)  return "豐收期";
+  if (from < 72)  return "沉澱期";
+  if (from < 81)  return "傳承期";
+  if (from < 90)  return "圓融期";
+  if (from < 99)  return "靜觀期";
+  if (from < 108) return "澄明期";
+  return "通達期";
+}
+
+/**
+ * 依年齡與大運數推導該階段的重點事件。
+ *
+ * ⚠️ 必須分年齡層：同一個大運數在不同人生階段的意義完全不同。
+ *    例如大運數 8 在成年是「投資與擴張」，
+ *    但套在 0–8 歲就會寫出「適合投資」這種荒謬的話。
+ *    童年看的是性格養成與家庭環境，晚年看的是健康與傳承。
+ *
+ * ⚠️ 用詞須留有餘地：這是傾向而非預言，
+ *    寫成「容易」「留意」而非「必然」「一定」。
+ */
+function dayunEvents(step, chart) {
+  const { num, from } = step;
+  const ev = [];
+  const child = from < 18;         // 童年與青少年
+  const elder = from >= 72;        // 晚年
+  const adult = !child && !elder;  // 成年主場
+
+  /* ── 童年／青少年：談性格養成與環境，不談婚姻財務 ── */
+  if (child) {
+    const CHILD = {
+      1: "個性早熟、主見強，容易被說「不聽話」。這階段若被過度壓抑，長大後容易在該表態時退縮。",
+      2: "對氣氛極度敏感，家中的緊張會被他完整接收。這階段的安全感決定他日後在關係裡的樣子。",
+      3: "表達慾旺盛、點子多，坐不住。適合讓他多接觸創作與表演，硬要他安靜反而會壓抑天賦。",
+      4: "循規蹈矩、需要明確的規則才安心。這階段適合建立作息與學習習慣，會受用一輩子。",
+      5: "好奇心強、閒不住，容易分心。這階段最需要的不是管束，而是足夠多元的刺激。",
+      6: "早熟懂事，容易成為家中的「小大人」。要留意他把別人的責任扛在身上，忘了自己還是孩子。",
+      7: "喜歡獨處、想得多，可能被誤認為孤僻。這階段需要的是被理解，而不是被推去社交。",
+      8: "對輸贏敏感、企圖心早現。這階段的成敗經驗會影響他日後如何看待自己的價值。",
+      9: "同理心強、容易替別人著想。要留意過度替人操心，也要教他學會拒絕。",
+    };
+    ev.push({ kind: "養成", text: CHILD[num] });
+    if ([2, 6, 9].includes(num)) {
+      ev.push({ kind: "家庭", text: "這階段與家人的互動影響特別深。長輩的態度會直接寫進他的性格底層。" });
+    }
+    if ([4, 7].includes(num)) {
+      ev.push({ kind: "健康", text: "體質與作息在這階段定型，睡眠與飲食習慣值得認真建立。" });
+    }
+    if ([1, 3, 5].includes(num)) {
+      ev.push({ kind: "安全", text: "活動量大、行動快，是跌撞與意外較多的階段，環境安全要多留意。" });
+    }
+    return ev;
+  }
+
+  /* ── 晚年：談健康、傳承與心境 ── */
+  if (elder) {
+    ev.push({ kind: "晚年", text: "重心會從外在成就轉向內在與傳承。健康管理與人際連結，比任何目標都重要。" });
+    if ([4, 7, 9].includes(num)) {
+      ev.push({ kind: "健康", text: "這是需要格外照顧身體的階段。定期檢查、規律作息，以及不勉強自己，是這幾年最重要的事。" });
+    }
+    if ([2, 6, 8].includes(num)) {
+      ev.push({ kind: "貴人", text: "身邊會出現真心相待的人——可能是晚輩、老友或伴侶。這階段的關係品質，決定生活的溫度。" });
+    }
+    if ([3, 8].includes(num)) {
+      ev.push({ kind: "傳承", text: "適合把一生的經驗整理下來，或帶著後輩。你的價值在這階段會以另一種形式延續。" });
+    }
+    if (num === 5) {
+      ev.push({ kind: "變動", text: "居住環境或生活型態容易有變化。移動時要格外留意安全，別逞強。" });
+    }
+    return ev;
+  }
+
+  /* ── 成年：完整的人生事件 ── */
+  if ([2, 6, 8].includes(num)) {
+    ev.push({ kind: "貴人", text: "這階段容易遇到願意幫你的人，而且往往不是你開口求來的。留意那些主動釋出善意的對象，關係值得長期經營。" });
+  }
+  if ([2, 6].includes(num)) {
+    ev.push({ kind: "感情", text: "感情的關鍵期。單身者容易遇到穩定發展的對象，已有伴侶者則適合進入下一個階段——同居、結婚或共組家庭。" });
+  } else if (num === 5) {
+    ev.push({ kind: "感情", text: "關係容易出現變化。穩定的會被考驗，停滯的會鬆動。重大決定建議至少沉澱三個月。" });
+  } else if (num === 9) {
+    ev.push({ kind: "感情", text: "關係面臨去留的抉擇，勉強維繫的容易走到盡頭。放下不代表失敗，是在騰出空間。" });
+  }
+  if (num === 5) {
+    ev.push({ kind: "車關", text: "移動與變動都多，是整個循環裡最需留意交通安全的階段。長途駕駛、夜間行車、疲勞時開車都要特別謹慎。" });
+  } else if (num === 1) {
+    ev.push({ kind: "車關", text: "節奏快、行動力強，容易在趕時間時疏忽。出行前多留十分鐘，是這階段最划算的投資。" });
+  }
+  if ([4, 7].includes(num)) {
+    ev.push({ kind: "健康", text: "身體的訊號在這階段會變得明顯，多半是前面幾年累積的結果。建議建立固定的健檢習慣，別把疲勞當常態。" });
+  }
+  if (num === 8) {
+    ev.push({ kind: "財運", text: "財務成長最明顯的階段，適合投資與擴張。但也是負債風險最高的時候——擴張前先確認退路。" });
+  } else if (num === 4) {
+    ev.push({ kind: "財運", text: "適合累積而非衝刺。這階段存下來的，會成為後面兩個階段的底氣。" });
+  }
+  if ([1, 3, 8].includes(num)) {
+    ev.push({ kind: "事業", text: "事業的推進期。適合承擔更大的責任，或把既有的成果放大。" });
+  }
+  return ev;
+}
+
+/** 組出完整的大運章節 */
+function dayunReading(dayun, chart, numbers) {
+  const steps = dayun.steps.map((s) => {
+    const info = DAYUN_INFO[s.num];
+    return {
+      ...s,
+      phase: lifePhaseName(s.from),
+      name: info.name,
+      theme: info.theme,
+      desc: info.desc,
+      watch: info.watch,
+      good: info.good,
+      events: dayunEvents(s, chart),
+    };
+  });
+
+  const cur = steps.find((s) => s.current) || null;
+  const next = cur ? steps.find((s) => s.index === cur.index + 1) : null;
+
+  return {
+    currentAge: dayun.currentAge,
+    span: dayun.span,
+    maxAge: dayun.maxAge,
+    steps,
+    current: cur,
+    next,
+    overview: cur
+      ? `你今年 ${dayun.currentAge} 歲，正走在第 ${cur.index + 1} 步大運「${cur.name}」（${cur.from}–${cur.to} 歲，西元 ${cur.years[0]}–${cur.years[1]}）。這九年的基調是「${cur.theme}」。`
+      : `你目前的年齡尚未進入大運推算範圍，或已超過 ${dayun.maxAge} 歲。`,
+    note: `大運以九年為一步，自出生起算，推至 ${dayun.maxAge} 歲共 ${steps.length} 步。大運看的是整個階段的氣候，流年看的是當年的天氣——兩者要合看：流年再好，若逆著大運的方向硬推，也事倍功半。`,
+  };
+}
+
+/* ============================================================
    2. 五行 → 桃花元素
    ============================================================ */
 
@@ -487,6 +789,8 @@ function generateReport(chart) {
   const innate = chart.innate, match = chart.match;
   const biz = bizFit(numbers.life, numbers.talent);
   const lucky = LUCKY[element];
+  const gridRead = gridReading(chart.grid, numbers, chart.innerOuter);
+  const dayunRead = dayunReading(chart.dayun, chart, numbers);
 
   return {
     // 1 總評
@@ -599,6 +903,12 @@ function generateReport(chart) {
         ? `你天生缺少 ${innate.missing.join("、")} 這 ${innate.missing.length} 個數字。缺不是壞事，是提醒你這些能力需要後天刻意練習，而非等它自然長出來。`
         : "你的出生日期涵蓋了 1–9 所有數字，這在命盤中相當少見，代表你各方面的基礎都不缺，但也可能因此缺乏極端的專長。",
     },
+
+    // 8.25 九宮格與連線
+    gridReading: gridRead,
+
+    // 8.26 大運（0–120 歲）
+    dayun: dayunRead,
 
     // 8.3 人生課題
     lesson: LIFE_LESSON[numbers.life],
@@ -714,6 +1024,17 @@ function buildHighlights(chart) {
   add("財運與創業", `適合你的收入結構是${numbers.talent === 5 ? "多線並行" : numbers.talent === 4 || numbers.talent === 8 ? "單一深耕、規模化" : "主業穩定＋副業探索"}。`);
   add("財運與創業", `流年數 8 的年份最適合談錢、擴張與投資，數 4 與 7 的年份宜守。`);
 
+  /* --- 九宮格連線（10） --- */
+  const gr = gridReading(chart.grid, numbers, chart.innerOuter);
+  add("九宮格連線", `九宮格中有 ${gr.present.join("、")}，缺 ${gr.missing.join("、") || "無"}。`);
+  add("九宮格連線", `共形成 ${gr.onCount} 條連線，連線能量 ${gr.energy} 分。`);
+  gr.on.slice(0, 5).forEach(l =>
+    add("九宮格連線", `${l.nums.join("-")} ${l.title}成形：${l.text.split("。")[0]}。`));
+  if (gr.strongest) add("九宮格連線", `最強連線為「${gr.strongest.title}」（${gr.strongest.nums.join("-")}），強度 ${gr.strongest.strength}。`);
+  gr.nearMiss.slice(0, 2).forEach(l =>
+    add("九宮格連線", `${l.title}（${l.nums.join("-")}）僅差數字 ${l.lacking.join("、")}，是最值得補強的方向。`));
+  add("九宮格連線", gr.verdict);
+
   /* --- 感情姻緣（10） --- */
   add("感情姻緣", `你的桃花元素為「${peach.name}」，桃花指數 ${peachScore} 分。`);
   add("感情姻緣", peach.desc.split("。")[0] + "。");
@@ -791,6 +1112,7 @@ if (typeof module !== "undefined") {
   module.exports = {
     generateReport, buildHighlights,
     innerOuterAnalysis, INNER_TRAIT, OUTER_TRAIT,
+    gridReading, LINE_INFO, dayunReading, DAYUN_INFO, lifePhaseName, dayunEvents,
     MISSING_DIGIT, pickPrimaryMissing, ELEMENT_MAP_LOCAL, LIFE_LESSON, PROS_CONS, MONEY_TALENT, COLOR_WHY, bizFit,
     LIFE_PATH, PEACH_ELEMENT, BAD_PEACH, CAREER, IDEAL_TYPE, YEAR_FORTUNE, LUCKY,
   };

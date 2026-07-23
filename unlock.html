@@ -3,7 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>東方靈數占卜｜完整報告</title>
+<title>生命靈數占卜｜完整報告</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- 全部為 SIL OFL 1.1 開源字型，可自由商用。
+     無網路時會自動退回系統字型，版面不受影響。 -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Reggae+One&family=Dela+Gothic+One&display=swap">
 <link rel="stylesheet" href="src/app.css">
 <style>#unlockTag{position:fixed;top:0;left:0;right:0;z-index:99;text-align:center;
   padding:5px;font-size:10.5px;letter-spacing:.3em;color:#0B0E1A;
@@ -25,10 +30,10 @@
       <path class="slash" d="M4 4l16 16"/>
     </svg>
   </button>
-  <video class="vid" id="v1" playsinline muted preload="auto"></video>
-  <video class="vid" id="v2" playsinline loop preload="auto"></video>
-  <video class="vid" id="v3" playsinline preload="auto"></video>
-  <video class="vid" id="v4" playsinline preload="auto"></video>
+  <video class="vid" id="v1" poster="assets/img/v1-poster.jpg" playsinline muted preload="auto"></video>
+  <video class="vid" id="v2" poster="assets/img/v2-poster.jpg" playsinline loop preload="auto"></video>
+  <video class="vid" id="v3" poster="assets/img/v3-poster.jpg" playsinline preload="auto"></video>
+  <video class="vid" id="v4" poster="assets/img/v4-poster.jpg" playsinline preload="auto"></video>
 
   <div id="missing"><div class="inner" id="missingBody"></div></div>
 
@@ -38,7 +43,7 @@
 
   <div class="panel" id="pIntro">
     <div class="titlebox">
-      <h1>東方靈數占卜</h1>
+      <h1>生命靈數占卜</h1>
       <p>生 命 靈 數　·　五 行　·　流 年</p>
     </div>
     <div class="hint" id="introHint">輕 觸 水 晶 球</div>
@@ -51,7 +56,7 @@
              placeholder="1990 / 01 / 01" autocomplete="off">
       <div class="err" id="err"></div>
     </div>
-    <div class="hint" id="collectHint" style="opacity:.45">填 妥 後 輕 觸 水 晶 球</div>
+    <div class="hint" id="collectHint">填 妥 後 輕 觸 水 晶 球</div>
   </div>
 
   <div class="panel" id="pCalc"><div id="prog"></div></div>
